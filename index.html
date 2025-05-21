@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Whispers in the Garden</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f9f7f0; /* Fallback for body if canvas doesn't cover */
+            color: #34495e;
+        }
+        canvas { 
+            display: block; 
+        }
+        .overlay {
+            position: fixed; /* Use fixed to ensure it covers viewport even if body scrolls (though it shouldn't) */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(249, 247, 240, 0.97); /* Slightly more opaque */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 1000;
+            overflow-y: auto; /* Allow scrolling if content overflows */
+        }
+        .overlay-content {
+            max-width: 700px;
+            padding: 20px;
+            background: rgba(255,255,255,0.7);
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .overlay h1 { 
+            color: #2c3e50; /* Darker heading */
+            margin-bottom: 20px;
+        }
+        .overlay h2 {
+            color: #34495e;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        .overlay p { 
+            color: #34495e; 
+            margin-bottom: 12px; 
+            line-height: 1.6;
+            font-size: 1em;
+        }
+        .overlay ul {
+            list-style-position: inside;
+            padding-left: 0;
+            text-align: left;
+            display: inline-block;
+        }
+        .overlay li {
+            margin-bottom: 8px;
+        }
+        .overlay button {
+            padding: 12px 25px;
+            font-size: 1.1em;
+            color: white;
+            background-color: #3498db; /* Blue */
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 25px;
+            transition: background-color 0.3s ease;
+        }
+        .overlay button:hover { 
+            background-color: #2980b9; /* Darker blue */
+        }
+        #endScreenChartContainer {
+            width: 90%;
+            max-width: 500px; /* Adjusted for better mobile view */
+            margin: 20px auto;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        #endScreenChartContainer canvas {
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 600px) {
+            .overlay h1 { font-size: 1.5em; }
+            .overlay p { font-size: 0.9em; }
+            .overlay button { font-size: 1em; padding: 10px 20px; }
+            .overlay-content { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- p5.js canvas will be created here by script -->
+
+    <div id="instructionScreen" class="overlay">
+        <div class="overlay-content">
+            <h1>Welcome to Whispers in the Garden!</h1>
+            <p><strong>Objective:</strong> Explore the Theory of Constraints (I=RT: Inventory = Rate × Time) by guiding "idea particles" from a Source to a Destination. Your goal is to maximize flow and understand how different constraints impact the system.</p>
+            
+            <div id="sharedInstructions">
+                <h2>Gameplay Controls:</h2>
+                <ul>
+                    <li><strong>Adjust Particle Rate:</strong> Use the slider at the bottom to control how fast new ideas are generated.</li>
+                    <li><strong>Reshape Paths:</strong> Click/tap and drag the middle section of any path to change its shape. This can influence particle travel time and choice.</li>
+                    <li><strong>Boost Path Capacity:</strong> Click/tap on a path segment to temporarily increase its processing speed. Use this wisely to alleviate bottlenecks!</li>
+                </ul>
+            </div>
+            <div id="desktopSpecificInstructions" style="display:none;">
+                 <p><em>You are on a desktop. Use your mouse for interactions.</em></p>
+            </div>
+            <div id="mobileSpecificInstructions" style="display:none;">
+                 <p><em>You are on a mobile device. Use touch for interactions.</em></p>
+            </div>
+
+            <h2>Path Types & Constraints:</h2>
+            <ul>
+                <li><strong>Path 1 (Rate):</strong> Its width changes over time, affecting how many particles can pass smoothly.</li>
+                <li><strong>Path 2 (Time):</strong> Contains gates that open and close, creating delays.</li>
+                <li><strong>Path 3 (Inventory/Type):</strong> Has color filters. Only particles of a matching color can pass easily.</li>
+            </ul>
+            <p>Observe, adapt, and cultivate an efficient flow! The simulation will run for a fixed duration.</p>
+            <button onclick="startGame()">Start Tending the Garden</button>
+        </div>
+    </div>
+
+    <div id="endScreen" class="overlay" style="display: none;">
+        <div class="overlay-content">
+            <h1>Garden Report</h1>
+            <p>Your gardening session has concluded. Here's the performance summary:</p>
+            <p><strong>Total Time:</strong> <span id="totalTimeStat"></span> seconds</p>
+            <p><strong>Total Ideas Processed:</strong> <span id="totalProcessedStat"></span></p>
+            <p><strong>Average Flow Rate:</strong> <span id="avgFlowRateStat"></span> ideas/sec</p>
+            <p><strong>Average Ideas in System (Inventory):</strong> <span id="avgInventoryStat"></span></p>
+            
+            <h2>Performance Over Time:</h2>
+            <div id="endScreenChartContainer">
+                <canvas id="flowRateChart"></canvas>
+                <canvas id="inventoryChart"></canvas>
+            </div>
+
+            <h2>Your Gardener Profile:</h2>
+            <p id="pathPreferenceText"></p>
+            <p id="bottleneckResponseText"></p>
+            <p id="experimentalStyleText"></p>
+
+            <button onclick="restartGame()">Tend Another Garden</button>
+        </div>
+    </div>
+
+    <script>
+        // Constants
+        const colors = {
+            background: "#f9f7f0",
+            particles: {
+                blue: "#3498db",
+                green: "#2ecc71",
+                red: "#e74c3c",
+                yellow: "#f1c40f"
+            },
+            paths: {
+                base: "#34495e",
+                highlight: "#8e44ad",
+                boost: "#e67e22" 
+            },
+            nodes: "#7f8c8d"
+        };
+        const PARTICLE_COLORS_ARRAY = Object.values(colors.particles);
+        const GAME_DURATION_SECONDS = 120; // 2 minutes
+        const MAX_PARTICLES_PER_SECOND = 10; // Max emission rate from slider
+        const PATH_BOOST_DURATION = 5 * 60; // 5 seconds in frames
+        const PATH_INTERACTION_RADIUS = 30; // For clicking/dragging paths
+
+        // Game State
+        let gameState = 'instructions'; // 'instructions', 'playing', 'gameOver'
+        let gameStartTime;
+        let isMobile;
+
+        // p5.js specific game variables
+        let canvas;
+        let nodeSize, particleSize, pathThicknessBase;
+        let sourcePos, destPos;
+        let paths = [];
+        let particles = [];
+        let completedParticles = []; // To track particles that reached destination
+
+        // UI Elements
+        let flowSlider;
+
+        // Metrics & Analysis
+        let flowRate = 0;
+        let systemInventory = 0;
+        let bottleneckPathId = null;
+        let playerMetrics = { pathPreference: [0, 0, 0], bottleneckResponsiveness: 0, experimentalIndex: 0, totalInteractions: 0 };
+        let lastBottleneckPathId = null;
+        let lastInteractionCounts = [0,0,0];
+        
+        let historyData = {
+            flowRate: [],
+            inventory: [],
+            time: []
+        };
+        let dataCollectInterval = 60; // Collect data every 60 frames (1 second)
+
+        // Interaction state
+        let draggingPath = null; // Stores the path object being dragged
+        let interactionTarget = null; // For general interaction checks
+
+        // Helper: standard deviation and mean
+        function standardDeviation(arr) {
+            if (!arr || arr.length === 0) return 0;
+            const meanVal = mean(arr);
+            const variance = arr.reduce((acc, val) => acc + Math.pow(val - meanVal, 2), 0) / arr.length;
+            return Math.sqrt(variance);
+        }
+
+        function mean(arr) {
+            if (!arr || arr.length === 0) return 0;
+            return arr.reduce((acc, val) => acc + val, 0) / arr.length;
+        }
+        
+        function setup() {
+            canvas = createCanvas(windowWidth, windowHeight);
+            canvas.parent(document.body); // Attach to body directly
+            
+            setupLayout(); // Sets up sizes and positions
+            
+            if (gameState === 'instructions') {
+                showInstructions();
+                noLoop(); // Don't start game loop until instructions dismissed
+            } else { // Handles restart case
+                initializeGame();
+            }
+        }
+
+        function showInstructions() {
+            document.getElementById('instructionScreen').style.display = 'flex';
+            if (isMobile) {
+                document.getElementById('mobileSpecificInstructions').style.display = 'block';
+                document.getElementById('desktopSpecificInstructions').style.display = 'none';
+            } else {
+                document.getElementById('desktopSpecificInstructions').style.display = 'block';
+                document.getElementById('mobileSpecificInstructions').style.display = 'none';
+            }
+        }
+        
+        // Called by button click
+        window.startGame = function() {
+            document.getElementById('instructionScreen').style.display = 'none';
+            gameState = 'playing';
+            initializeGame(); // Initialize or reset game elements
+            loop(); // Start p5 draw loop
+        }
+
+        window.restartGame = function() {
+            document.getElementById('endScreen').style.display = 'none';
+            // Clear old chart instances if they exist
+            if (window.flowRateChartInstance) window.flowRateChartInstance.destroy();
+            if (window.inventoryChartInstance) window.inventoryChartInstance.destroy();
+            
+            gameState = 'playing'; // Reset state
+            setup(); // Re-run setup which calls initializeGame
+            loop();
+        }
+        
+        function initializeGame() {
+            gameStartTime = millis();
+            drawBackgroundPattern(); // Draw background once
+
+            // Reset particles and metrics
+            particles = [];
+            completedParticles = [];
+            flowRate = 0;
+            systemInventory = 0;
+            bottleneckPathId = null;
+            playerMetrics = { pathPreference: [0, 0, 0], bottleneckResponsiveness: 0, experimentalIndex: 0, totalInteractions: 0 };
+            lastBottleneckPathId = null;
+            lastInteractionCounts = [0,0,0];
+            historyData = { flowRate: [], inventory: [], time: [] };
+
+            // Create paths
+            // Path IDs will be 0, 1, 2
+            paths = [
+                new Path(0, 'rate', sourcePos, createVector(width * 0.5, height * 0.35), destPos, pathThicknessBase),
+                new Path(1, 'time', sourcePos, createVector(width * 0.4, height * 0.65), destPos, pathThicknessBase),
+                new Path(2, 'inventory', sourcePos, createVector(width * 0.6, height * 0.5), destPos, pathThicknessBase)
+            ];
+            paths.forEach(p => p.baseWidth = pathThicknessBase); // Ensure baseWidth is set
+        }
+
+        function setupLayout() {
+            isMobile = windowWidth < 768; // Broader definition for mobile-like layouts
+
+            nodeSize = isMobile ? windowWidth * 0.08 : windowWidth * 0.05;
+            particleSize = isMobile ? 6 : 10; // Adjusted from spec for better visibility
+            pathThicknessBase = isMobile ? 12 : 20; // Base thickness
+
+            sourcePos = createVector(width * 0.15, height * 0.5);
+            destPos = createVector(width * 0.85, height * 0.5);
+
+            flowSlider = {
+                x: width / 2,
+                y: height - (isMobile ? 30 : 40), // Higher on mobile for easier reach
+                width: min(width * 0.6, 400), // Max width for slider
+                height: isMobile ? 30 : 20,
+                value: 0.5, // Initial flow rate factor (0.1 to 1.0)
+                dragging: false
+            };
+            flowSlider.handleWidth = flowSlider.height * 1.2; // Width of the draggable part of slider
+        }
+
+        function drawBackgroundPattern() {
+            background(colors.background); // Solid base
+            loadPixels();
+            for (let x = 0; x < width; x += 8) {
+                for (let y = 0; y < height; y += 8) {
+                    let noiseVal = noise(x * 0.005, y * 0.005) * 20; // Sparser noise
+                    let cVal = floor(240 + noiseVal); // Slightly vary base color
+                    let c = color(cVal, cVal, cVal - 5, 50); // subtle, low alpha
+                    
+                    for (let i = 0; i < 8; i++) {
+                        for (let j = 0; j < 8; j++) {
+                            if (x + i < width && y + j < height) {
+                                set(x + i, y + j, c);
+                            }
+                        }
+                    }
+                }
+            }
+            updatePixels();
+        }
+
+        function draw() {
+            if (gameState !== 'playing') return;
+
+            // Slight transparency for trail effect, but redraw background pattern periodically or use a static one.
+            // For simplicity, we drew background once. This clear makes trails.
+            background(red(color(colors.background)), green(color(colors.background)), blue(color(colors.background)), 30);
+
+
+            let elapsedTimeSeconds = (millis() - gameStartTime) / 1000;
+            if (elapsedTimeSeconds >= GAME_DURATION_SECONDS) {
+                endGame();
+                return;
+            }
+
+            // Particle Generation
+            // Using spec's formula: int(60 / flowSlider.value)
+            // This means if value is 0.5, emit every 120 frames (0.5 particle/sec at 60fps)
+            // If value is 1, emit every 60 frames (1 particle/sec at 60fps)
+            // If value is 0.1, emit every 600 frames (0.1 particle/sec at 60fps)
+            // To make slider more responsive (higher value = higher rate):
+            // Max rate: e.g. 10 particles/sec. Min rate: 1 particle/sec.
+            // emitRate = map(flowSlider.value, 0.1, 1, 1, MAX_PARTICLES_PER_SECOND)
+            let currentEmitRate = map(flowSlider.value, 0.1, 1, 0.5, MAX_PARTICLES_PER_SECOND); // particles per second
+            let emitIntervalFrames = frameRate() / currentEmitRate;
+            if (frameCount % Math.max(1, floor(emitIntervalFrames)) === 0) {
+                let randomColor = random(PARTICLE_COLORS_ARRAY);
+                particles.push(new Particle(sourcePos.x, sourcePos.y, randomColor));
+            }
+
+            // Update and display paths
+            for (let path of paths) {
+                path.update(); // For animations like gates, width changes
+                path.display();
+            }
+
+            // Update and display particles
+            updateParticles();
+            for (let p of particles) {
+                p.display();
+            }
+
+            // Draw source and destination nodes
+            drawNode(sourcePos.x, sourcePos.y, nodeSize, true); // true for emitter
+            drawNode(destPos.x, destPos.y, nodeSize, false); // false for collector
+
+            // Draw UI
+            drawSlider();
+            updateScoreAndMetrics(elapsedTimeSeconds);
+            drawMetrics();
+
+            // Track player behavior
+            if (frameCount % 60 === 0) { // Once per second
+                 trackPlayerBehavior();
+                 if (historyData.time.length === 0 || elapsedTimeSeconds > historyData.time[historyData.time.length -1] + 0.9) {
+                    historyData.flowRate.push(flowRate);
+                    historyData.inventory.push(systemInventory);
+                    historyData.time.push(elapsedTimeSeconds);
+                 }
+            }
+        }
+
+        function endGame() {
+            gameState = 'gameOver';
+            noLoop(); // Stop p5 draw loop
+            calculateFinalPersonality();
+            showEndScreen();
+        }
+
+        function showEndScreen() {
+            let elapsedTime = (millis() - gameStartTime) / 1000;
+            document.getElementById('totalTimeStat').innerText = elapsedTime.toFixed(1);
+            document.getElementById('totalProcessedStat').innerText = completedParticles.length;
+            
+            let avgFlow = completedParticles.length / elapsedTime || 0;
+            document.getElementById('avgFlowRateStat').innerText = avgFlow.toFixed(2);
+
+            let avgInv = historyData.inventory.length > 0 ? mean(historyData.inventory).toFixed(2) : '0.00';
+            document.getElementById('avgInventoryStat').innerText = avgInv;
+            
+            // Personality Text
+            document.getElementById('pathPreferenceText').innerText = playerMetrics.personalityTexts.pathPreference;
+            document.getElementById('bottleneckResponseText').innerText = playerMetrics.personalityTexts.bottleneckResponse;
+            document.getElementById('experimentalStyleText').innerText = playerMetrics.personalityTexts.experimentalStyle;
+
+
+            document.getElementById('endScreen').style.display = 'flex';
+            renderCharts();
+        }
+        
+        function renderCharts() {
+            // Clear previous charts if any (important for restart)
+            if (window.flowRateChartInstance) window.flowRateChartInstance.destroy();
+            if (window.inventoryChartInstance) window.inventoryChartInstance.destroy();
+
+            const commonOptions = {
+                scales: {
+                    x: { title: { display: true, text: 'Time (s)' } },
+                    y: { beginAtZero: true }
+                },
+                responsive: true,
+                maintainAspectRatio: true, // Adjust as needed
+            };
+
+            const flowCtx = document.getElementById('flowRateChart').getContext('2d');
+            window.flowRateChartInstance = new Chart(flowCtx, {
+                type: 'line',
+                data: {
+                    labels: historyData.time.map(t => t.toFixed(0)),
+                    datasets: [{
+                        label: 'Flow Rate (ideas/sec)',
+                        data: historyData.flowRate,
+                        borderColor: colors.particles.blue,
+                        backgroundColor:ผู้ชม(colors.particles.blue, 0.1),
+                        tension: 0.2,
+                        fill: true
+                    }]
+                },
+                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: 'Ideas / sec'}}}}
+            });
+
+            const inventoryCtx = document.getElementById('inventoryChart').getContext('2d');
+            window.inventoryChartInstance = new Chart(inventoryCtx, {
+                type: 'line',
+                data: {
+                    labels: historyData.time.map(t => t.toFixed(0)),
+                    datasets: [{
+                        label: 'Ideas in System (Inventory)',
+                        data: historyData.inventory,
+                        borderColor: colors.particles.green,
+                        backgroundColor:ผู้ชม(colors.particles.green, 0.1),
+                        tension: 0.2,
+                        fill: true
+                    }]
+                },
+                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: 'Number of Ideas'}}}}
+            });
+        }
+
+
+        function drawNode(x, y, r, isSource) {
+            let pulse = sin(frameCount * 0.05) * (r * 0.1);
+            let currentSize = r + pulse;
+            
+            push();
+            translate(x, y);
+            noStroke();
+            
+            // Pulsating effect
+            fill(red(color(colors.nodes)), green(color(colors.nodes)), blue(color(colors.nodes)), 100 + pulse * 5);
+            ellipse(0, 0, currentSize * 1.2, currentSize * 1.2);
+            fill(colors.nodes);
+            ellipse(0, 0, currentSize, currentSize);
+
+            // Emitter/collector effect (simple radiating lines)
+            if (isSource) {
+                stroke(255, 100 + pulse * 10); // White, fades with pulse
+                for (let i = 0; i < 8; i++) {
+                    let angle = TWO_PI / 8 * i + frameCount * 0.02;
+                    let len = currentSize * 0.6;
+                    line(0,0, cos(angle) * len, sin(angle) * len);
+                }
+            } else { // Collector
+                 stroke(0, 50 + pulse * 5); // Dark, fades
+                 for (let i = 0; i < 8; i++) {
+                    let angle = TWO_PI / 8 * i - frameCount * 0.02;
+                    let len1 = currentSize * 0.5;
+                    let len2 = currentSize * 0.7;
+                    line(cos(angle) * len1, sin(angle) * len1, cos(angle) * len2, sin(angle) * len2);
+                }
+            }
+            pop();
+        }
+
+        function drawSlider() {
+            push();
+            // Bar
+            fill(180);
+            rectMode(CENTER);
+            rect(flowSlider.x, flowSlider.y, flowSlider.width, flowSlider.height, flowSlider.height / 2);
+            
+            // Handle
+            let handleX = map(flowSlider.value, 0.1, 1, flowSlider.x - flowSlider.width/2 + flowSlider.handleWidth/2, flowSlider.x + flowSlider.width/2 - flowSlider.handleWidth/2);
+            fill(colors.particles.blue);
+            if (flowSlider.dragging) fill(colors.paths.highlight);
+            ellipse(handleX, flowSlider.y, flowSlider.handleWidth, flowSlider.handleWidth * (isMobile ? 1.2 : 1)); // Make taller for touch
+            
+            // Text label
+            fill(50);
+            textSize(isMobile ? 10 : 12);
+            textAlign(CENTER, CENTER);
+            text(`Idea Rate: ${(map(flowSlider.value, 0.1,1,0.5,MAX_PARTICLES_PER_SECOND)).toFixed(1)}/s`, flowSlider.x, flowSlider.y - flowSlider.height - (isMobile ? 8 : 10));
+            pop();
+        }
+        
+        function updateScoreAndMetrics(currentTime) {
+            systemInventory = particles.length;
+            
+            if (currentTime > 0) {
+                // Rate is # completed particles / time
+                rate = completedParticles.length / currentTime;
+            } else {
+                rate = 0;
+            }
+            flowRate = rate; // For display
+
+            // Calculate bottleneck (path with lowest throughput or highest blockage)
+            let pathThroughputs = [];
+            if (paths && paths.length > 0 && currentTime > 0) {
+                for (let path of paths) {
+                    pathThroughputs.push({
+                        id: path.id,
+                        // Throughput can be particles passed / time
+                        // Or, more dynamically, current "capacity" vs "load"
+                        throughput: path.particlesPassed / currentTime, 
+                        currentLoad: path.particlesOnPath() / (path.getCurrentCapacityFactor() + 0.01) // Factor to avoid div by zero
+                    });
+                }
+                
+                // Bottleneck could be lowest throughput, or highest relative load
+                // Using lowest throughput for simplicity as per spec
+                if (pathThroughputs.length > 0) {
+                     bottleneckPathId = pathThroughputs.reduce((min, p) => p.throughput < min.throughput ? p : min, pathThroughputs[0]).id;
+                }
+            } else {
+                bottleneckPathId = null;
+            }
+        }
+
+        function drawMetrics() {
+            push();
+            fill(50);
+            noStroke();
+            textAlign(LEFT, TOP);
+            textSize(isMobile ? 12 : 14);
+            let textY = 20;
+            let textX = 20;
+
+            text(`Flow Rate: ${flowRate.toFixed(2)} ideas/sec`, textX, textY);
+            textY += (isMobile ? 18 : 20);
+            text(`Ideas in System: ${systemInventory}`, textX, textY);
+            textY += (isMobile ? 18 : 20);
+            if (bottleneckPathId !== null) {
+                text(`Current Bottleneck: Path ${bottleneckPathId + 1}`, textX, textY);
+            } else {
+                text(`Current Bottleneck: Calculating...`, textX, textY);
+            }
+            textY += (isMobile ? 18 : 20);
+            let timeRemaining = GAME_DURATION_SECONDS - (millis() - gameStartTime)/1000;
+            text(`Time Remaining: ${max(0, timeRemaining).toFixed(0)}s`, textX, textY);
+            pop();
+        }
+        
+        function trackPlayerBehavior() {
+            playerMetrics.totalInteractions = paths.reduce((sum, p) => sum + p.interactionCount, 0);
+
+            // Track which paths player interacts with most (simple sum of interactions)
+            for (let i = 0; i < paths.length; i++) {
+                playerMetrics.pathPreference[i] = paths[i].interactionCount;
+            }
+
+            // Track response to bottlenecks
+            // If bottleneck changed AND player interacted with new bottleneck path since last check
+            if (bottleneckPathId !== null && bottleneckPathId !== lastBottleneckPathId) {
+                if (paths[bottleneckPathId].interactionCount > lastInteractionCounts[bottleneckPathId]) {
+                    playerMetrics.bottleneckResponsiveness++;
+                }
+            }
+            lastBottleneckPathId = bottleneckPathId;
+            if (paths && paths.length > 0) {
+                 for(let i=0; i<paths.length; i++) lastInteractionCounts[i] = paths[i].interactionCount;
+            }
+
+            // Track experimentation vs consistency
+            // High variance in path interactions = more experimental
+            // Low variance = more consistent focus
+            let pathInteractionCounts = playerMetrics.pathPreference;
+            if (mean(pathInteractionCounts) > 0) { // Avoid div by zero if no interactions
+                playerMetrics.experimentalIndex = standardDeviation(pathInteractionCounts) / mean(pathInteractionCounts);
+            } else {
+                playerMetrics.experimentalIndex = 0;
+            }
+        }
+
+        function calculateFinalPersonality() {
+            playerMetrics.personalityTexts = {};
+            // Path Preference
+            let maxInteractions = -1;
+            let preferredPathIndex = -1;
+            playerMetrics.pathPreference.forEach((count, index) => {
+                if (count > maxInteractions) {
+                    maxInteractions = count;
+                    preferredPathIndex = index;
+                }
+            });
+            if (preferredPathIndex !== -1 && maxInteractions > 0) {
+                const pathTypes = ['Rate-focused', 'Time-sensitive', 'Type-sorting'];
+                playerMetrics.personalityTexts.pathPreference = `You showed a preference for managing the ${paths[preferredPathIndex].type} constraint (Path ${preferredPathIndex + 1}), a ${pathTypes[preferredPathIndex]} approach.`;
+            } else if (playerMetrics.totalInteractions === 0) {
+                 playerMetrics.personalityTexts.pathPreference = "You took a hands-off, observational approach to gardening.";
+            }
+            else {
+                playerMetrics.personalityTexts.pathPreference = "You distributed your attention across all path types fairly evenly.";
+            }
+
+            // Bottleneck Responsiveness
+            let responsivenessScore = playerMetrics.bottleneckResponsiveness;
+            // Normalize responsiveness by number of times bottleneck could have changed. Heuristic:
+            let responsivenessRatio = historyData.time.length > 0 ? responsivenessScore / (historyData.time.length / 15) : 0; // Assuming bottleneck might change every 15s on avg
+
+            if (playerMetrics.totalInteractions === 0) {
+                 playerMetrics.personalityTexts.bottleneckResponse = "You preferred to let the garden find its own equilibrium.";
+            } else if (responsivenessRatio > 0.5) {
+                playerMetrics.personalityTexts.bottleneckResponse = "You're a proactive troubleshooter, quickly addressing system bottlenecks!";
+            } else if (responsivenessRatio > 0.2) {
+                playerMetrics.personalityTexts.bottleneckResponse = "You respond thoughtfully to system constraints when they become apparent.";
+            } else {
+                playerMetrics.personalityTexts.bottleneckResponse = "You seem to focus on overall system tuning rather than chasing individual bottlenecks.";
+            }
+            
+            // Experimental Index
+            if (playerMetrics.totalInteractions === 0) {
+                 playerMetrics.personalityTexts.experimentalStyle = "Your style was that of a patient observer.";
+            }
+            else if (playerMetrics.experimentalIndex > 0.8) { // High variance
+                playerMetrics.personalityTexts.experimentalStyle = "You're an avid experimenter, trying out many different path configurations!";
+            } else if (playerMetrics.experimentalIndex < 0.3 && playerMetrics.totalInteractions > paths.length * 2) { // Low variance but significant interactions
+                playerMetrics.personalityTexts.experimentalStyle = "You're a methodical optimizer, focusing on refining a specific strategy.";
+            } else {
+                playerMetrics.personalityTexts.experimentalStyle = "You adopt a balanced approach, experimenting somewhat but also sticking to what works.";
+            }
+        }
+
+        // Particle Class
+        class Particle {
+            constructor(x, y, col) {
+                this.position = createVector(x, y);
+                this.velocity = p5.Vector.random2D().mult(random(0.5, 1.5)); // Initial gentle push
+                this.acceleration = createVector(0, 0);
+                this.maxSpeed = isMobile ? 2.5 : 3.5;
+                this.maxForce = 0.2;
+                this.radius = particleSize;
+                this.color = col;
+                this.pathColor = color(this.color); // p5.Color object
+                this.pathColor.setAlpha(180);
+
+                this.currentPath = null; // The Path object it's following
+                this.pathTargetPos = null; // Target Point on Path (Vector)
+                this.pathProgress = 0; // Normalized progress (0-1) on current path
+                this.onPath = false;
+                this.gravity = createVector(0, 0.03); // Subtle gravity
+            }
+
+            applyForce(force) {
+                this.acceleration.add(force);
+            }
+
+            update() {
+                this.applyForce(this.gravity);
+
+                if (!this.onPath || !this.currentPath) {
+                    this.findAndFollowPath();
+                } else {
+                    this.followCurrentPath();
+                    this.applyPathConstraints();
+                }
+                
+                this.velocity.add(this.acceleration);
+                this.velocity.limit(this.maxSpeed * (this.currentPath && this.currentPath.boostActive ? 1.5 : 1));
+                this.position.add(this.velocity);
+                this.acceleration.mult(0); // Reset acceleration
+
+                // Check if reached destination
+                if (dist(this.position.x, this.position.y, destPos.x, destPos.y) < nodeSize / 2 + this.radius) {
+                    this.destroy(true); // True means reached destination
+                    if(this.currentPath) this.currentPath.particlesPassed++;
+                }
+                // Check bounds (simple removal if out of bounds)
+                if (this.position.y > height + this.radius * 2 || this.position.x < -this.radius || this.position.x > width + this.radius) {
+                    this.destroy(false);
+                }
+            }
+            
+            findAndFollowPath() {
+                let closestPath = null;
+                let minDistToPathStart = Infinity;
+
+                for (let path of paths) {
+                    // Attract towards path start points initially if not on a path
+                    let d = dist(this.position.x, this.position.y, path.controlPoints[0].x, path.controlPoints[0].y);
+                    if (d < minDistToPathStart && d < width * 0.3) { // Only consider paths if reasonably close
+                        minDistToPathStart = d;
+                        closestPath = path;
+                    }
+                }
+
+                if (closestPath) {
+                    // If close enough to the path's actual curve, snap to it
+                    let proj = closestPath.getClosestPoint(this.position);
+                    if (dist(this.position.x, this.position.y, proj.point.x, proj.point.y) < closestPath.thickness * 2) {
+                        this.currentPath = closestPath;
+                        this.onPath = true;
+                        this.pathProgress = proj.t;
+                    } else { // Steer towards path start
+                        let steerTarget = closestPath.controlPoints[0].copy();
+                        let desired = p5.Vector.sub(steerTarget, this.position);
+                        desired.normalize();
+                        desired.mult(this.maxSpeed);
+                        let steer = p5.Vector.sub(desired, this.velocity);
+                        steer.limit(this.maxForce);
+                        this.applyForce(steer);
+                    }
+                }
+            }
+
+            followCurrentPath() {
+                // Project current position to find current 't' on path
+                let proj = this.currentPath.getClosestPoint(this.position);
+                this.pathProgress = proj.t;
+
+                // Define a target point slightly ahead on the path
+                let lookAheadDistance = 0.05; // Normalized distance
+                let targetT = min(1, this.pathProgress + lookAheadDistance);
+                
+                if (this.pathProgress > 0.98) { // If near end of path, aim for actual destination node
+                    this.pathTargetPos = destPos.copy();
+                } else {
+                    this.pathTargetPos = this.currentPath.getPoint(targetT);
+                }
+
+                // Steer towards this target
+                let desired = p5.Vector.sub(this.pathTargetPos, this.position);
+                desired.normalize();
+                desired.mult(this.maxSpeed);
+                let steer = p5.Vector.sub(desired, this.velocity);
+                steer.limit(this.maxForce * (this.currentPath.boostActive ? 1.5 : 1));
+                this.applyForce(steer);
+            }
+
+            applyPathConstraints() {
+                if (!this.currentPath || !this.onPath) return;
+                let path = this.currentPath;
+                let speedFactor = 1.0;
+                let isBlocked = false;
+
+                switch(path.type) {
+                    case 'rate':
+                        // Path width affects speed/flow. Wider = less slowdown.
+                        // This is visually represented by path.currentThickness, actual effect is speed.
+                        let effectiveWidthFactor = path.currentThickness / path.baseWidth; // Can be > 1 or < 1
+                        speedFactor *= map(effectiveWidthFactor, 0.3, 1.5, 0.4, 1.2, true); // Clamp mapping
+                        break;
+                    case 'time':
+                        for (let gate of path.gates) {
+                            if (abs(this.pathProgress - gate.tPos) < 0.03 && !gate.isOpen) { // Small range around gate
+                                isBlocked = true;
+                                break;
+                            }
+                        }
+                        break;
+                    case 'inventory':
+                        let filterColor = path.getFilterColorAt(this.pathProgress);
+                        if (filterColor && this.color !== filterColor) {
+                            isBlocked = true;
+                        }
+                        break;
+                }
+                
+                if (isBlocked) {
+                    // Significantly slow down or try to nudge away
+                    this.velocity.mult(0.1); 
+                    // Add a small perpendicular force to avoid clumping too much
+                    let tangent = path.getTangent(this.pathProgress);
+                    let normal = createVector(-tangent.y, tangent.x).normalize().mult(this.maxForce * 0.5 * (random() > 0.5 ? 1: -1));
+                    this.applyForce(normal);
+
+                }
+                this.velocity.mult(speedFactor);
+            }
+
+
+            display() {
+                push();
+                translate(this.position.x, this.position.y);
+                rotate(this.velocity.heading()); // Align with velocity
+                
+                noStroke();
+                fill(this.pathColor); // Use the p5.Color object for alpha
+                
+                // Subtle shape variation hint - for now, all circles. Could be:
+                // if (this.color === colors.particles.blue) ellipse(0,0,this.radius*2, this.radius*1.8) etc.
+                ellipse(0, 0, this.radius * 2, this.radius * 2);
+                
+                // Optional: small highlight
+                fill(255, 255, 255, 100);
+                ellipse(-this.radius * 0.2, -this.radius * 0.2, this.radius * 0.8, this.radius * 0.8);
+                pop();
+            }
+
+            destroy(reachedDest) {
+                let index = particles.indexOf(this);
+                if (index > -1) {
+                    particles.splice(index, 1);
+                    if (reachedDest) {
+                        completedParticles.push(this); // Or just count it
+                    }
+                }
+            }
+        }
+
+        // Path Class
+        class Path {
+            constructor(id, type, startVec, controlVec, endVec, thickness) {
+                this.id = id;
+                this.type = type;
+                // For a quadratic Bezier: start, control, end
+                this.controlPoints = [startVec.copy(), controlVec.copy(), endVec.copy()];
+                this.baseWidth = thickness; // Original thickness for calculations
+                this.thickness = thickness; // Current visual thickness
+                this.currentThickness = thickness; // For rate path
+                this.interactionCount = 0;
+                this.particlesPassed = 0; // Counter for scoring
+
+                this.boostTimer = 0;
+                this.boostActive = false;
+
+                // Path-specific constraint elements
+                this.gates = []; // For 'time' path {tPos: 0-1, isOpen: bool}
+                this.filters = []; // For 'inventory' path {tPos: 0-1, color: '#rrggbb'}
+                this.numSegmentsForSampling = 30; // For closest point calculation
+                this.sampledPoints = []; // Cache for faster closest point calculation
+                this.resamplePoints();
+
+                if (this.type === 'time') {
+                    for (let i = 0; i < 3; i++) { // 3 gates
+                        this.gates.push({ tPos: 0.25 + i * 0.25, isOpen: true, cycleOffset: i * PI/3 });
+                    }
+                } else if (this.type === 'inventory') {
+                    for (let i = 0; i < 4; i++) { // 4 filter segments
+                        this.filters.push({ tPosStart: i * 0.25, tPosEnd: (i+1)*0.25, color: PARTICLE_COLORS_ARRAY[i % PARTICLE_COLORS_ARRAY.length]});
+                    }
+                }
+            }
+
+            resamplePoints() {
+                this.sampledPoints = [];
+                for (let i = 0; i <= this.numSegmentsForSampling; i++) {
+                    let t = i / this.numSegmentsForSampling;
+                    this.sampledPoints.push({p: this.getPoint(t), t: t});
+                }
+            }
+            
+            moveControlPoint(x, y) {
+                // Only move the middle control point for quadratic bezier
+                this.controlPoints[1].set(x, y);
+                this.resamplePoints(); // Resample after moving
+                this.interactionCount++;
+                playerMetrics.totalInteractions++;
+            }
+
+            update() { // For time-based changes to constraints
+                if (this.boostTimer > 0) {
+                    this.boostTimer--;
+                    if (this.boostTimer === 0) this.boostActive = false;
+                }
+
+                switch(this.type) {
+                    case 'rate':
+                        // Width varies periodically along path
+                        // currentThickness is what affects particles, thickness is for visual pulse
+                        this.currentThickness = this.baseWidth * (0.6 + sin(frameCount * 0.03 + this.id * PI) * 0.4); // Varies from 0.2 to 1.0 of baseWidth
+                        break;
+                    case 'time':
+                        this.gates.forEach(gate => {
+                            gate.isOpen = sin(frameCount * 0.04 + gate.cycleOffset) > -0.2; // Adjust threshold for open duration
+                        });
+                        break;
+                    case 'inventory':
+                        // Filters are static, no update needed here unless they animate
+                        break;
+                }
+            }
+
+            getPoint(t) { // t is 0 to 1
+                let p = this.controlPoints;
+                return createVector(
+                    bezierPoint(p[0].x, p[1].x, p[2].x, t), // Quadratic Bezier has 3 points for x
+                    bezierPoint(p[0].y, p[1].y, p[2].y, t)  // And 3 for y. p5.js takes 4 for quadratic: x1,cx,x2,t
+                );
+            }
+            
+            // Quadratic Bezier Point: x1, y1, cx1, cy1, x2, y2
+            // My points are p[0], p[1] (control), p[2]
+            // So it's p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y
+            // For p5's bezierPoint and bezierTangent, use:
+            // bezierPoint(this.controlPoints[0].x, this.controlPoints[1].x, this.controlPoints[2].x, t) IS WRONG.
+            // It should be: bezierPoint(anchor1.x, control1.x, control2.x, anchor2.x, t) for CUBIC.
+            // For QUADRATIC, p5js doesn't have a direct 3-point bezierPoint. It needs 4 args for x (x1,cx,x2,t) or 6 for xy (x1,y1,cx,cy,x2,y2).
+            // I'll implement quadratic Bezier formula manually for clarity.
+            // B(t) = (1-t)^2 * P0 + 2*(1-t)*t * P1 + t^2 * P2
+            _getPointManual(t) {
+                let p0 = this.controlPoints[0];
+                let p1 = this.controlPoints[1];
+                let p2 = this.controlPoints[2];
+                let mt = 1 - t;
+                let x = mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x;
+                let y = mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y;
+                return createVector(x,y);
+            }
+            // This getPoint is now correct as per my manual quadratic formula.
+            getPoint(t) { return this._getPointManual(t); }
+
+
+            getTangent(t) { // Returns a normalized direction vector
+                let p0 = this.controlPoints[0];
+                let p1 = this.controlPoints[1];
+                let p2 = this.controlPoints[2];
+                let mt = 1 - t;
+                // Derivative: B'(t) = 2*(1-t)*(P1-P0) + 2*t*(P2-P1)
+                let tx = 2 * mt * (p1.x - p0.x) + 2 * t * (p2.x - p1.x);
+                let ty = 2 * mt * (p1.y - p0.y) + 2 * t * (p2.y - p1.y);
+                return createVector(tx, ty).normalize();
+            }
+
+            getAngle(t) { // Angle of tangent at t
+                let tangent = this.getTangent(t);
+                return atan2(tangent.y, tangent.x);
+            }
+
+            getFilterColorAt(tPos) { // For inventory path
+                if (this.type !== 'inventory') return null;
+                for (let filter of this.filters) {
+                    if (tPos >= filter.tPosStart && tPos < filter.tPosEnd) {
+                        return filter.color;
+                    }
+                }
+                return null; // Default if outside defined filter ranges
+            }
+
+            particlesOnPath() {
+                return particles.filter(p => p.currentPath === this).length;
+            }
+            getCurrentCapacityFactor() { // A measure of how "open" the path is
+                if(this.type === 'rate') return this.currentThickness / this.baseWidth;
+                if(this.type === 'time') return this.gates.filter(g => g.isOpen).length / this.gates.length; // Fraction of open gates
+                // Inventory path is harder to quantify simple capacity; assume 1 if not blocked.
+                return 1; 
+            }
+
+            getClosestPoint(pt) { // pt is a p5.Vector
+                let closestDistSq = Infinity;
+                let closestPt = null;
+                let closestT = 0;
+
+                // Iterate through sampled points to find rough segment
+                // This is an approximation. For higher accuracy, can subdivide segments.
+                for (let i = 0; i < this.sampledPoints.length -1; i++) {
+                    let p1 = this.sampledPoints[i].p;
+                    let p2 = this.sampledPoints[i+1].p;
+                    let t1 = this.sampledPoints[i].t;
+                    let t2 = this.sampledPoints[i+1].t;
+                    
+                    // Simple distance to segment endpoints as a quick check
+                    let dSq = distSq(pt, p1);
+                    if (dSq < closestDistSq) {
+                        closestDistSq = dSq;
+                        closestPt = p1;
+                        closestT = t1;
+                    }
+                    // For a more accurate version, project pt onto line segment p1-p2
+                    // And then interpolate t. For now, this simplified version picks closest sampled point.
+                }
+                 // Check last point
+                let lastSampled = this.sampledPoints[this.sampledPoints.length-1];
+                let dSq = distSq(pt, lastSampled.p);
+                 if (dSq < closestDistSq) {
+                    closestDistSq = dSq;
+                    closestPt = lastSampled.p;
+                    closestT = lastSampled.t;
+                }
+                return {point: closestPt, t: closestT, distSq: closestDistSq};
+            }
+            
+            display() {
+                push();
+                noFill();
+                
+                // Base path line
+                strokeWeight(this.thickness * (this.boostActive ? 1.5 : 1));
+                stroke(this.boostActive ? colors.paths.boost : colors.paths.base);
+                if (this.id === bottleneckPathId && !this.boostActive) {
+                    stroke(colors.particles.red); // Highlight bottleneck
+                }
+                
+                beginShape();
+                for (let i = 0; i <= 1; i += 0.02) { // Finer steps for smoother curve
+                    let p = this.getPoint(i);
+                    vertex(p.x, p.y);
+                }
+                endShape();
+                
+                // Pulsing highlight for interaction indication (when mouse is over path's control point)
+                let dToControl = dist(mouseX, mouseY, this.controlPoints[1].x, this.controlPoints[1].y);
+                if (dToControl < PATH_INTERACTION_RADIUS * 1.5) {
+                    stroke(colors.paths.highlight, 150 + sin(frameCount * 0.1) * 100);
+                    strokeWeight(this.thickness * 0.5);
+                    beginShape();
+                    for (let i = 0; i <= 1; i += 0.02) {
+                        let p = this.getPoint(i);
+                        vertex(p.x, p.y);
+                    }
+                    endShape();
+                    // Draw control point clearly if mouse is near
+                    fill(colors.paths.highlight); noStroke();
+                    ellipse(this.controlPoints[1].x, this.controlPoints[1].y, 15, 15);
+                }
+
+
+                // Constraint visualization
+                this.displayConstraints();
+                pop();
+            }
+            
+            displayConstraints() {
+                switch(this.type) {
+                    case 'rate':
+                        // Visual of variable width (already handled by this.currentThickness if used for main stroke)
+                        // Or, draw segments with varying width using this.currentThickness
+                        strokeWeight(this.currentThickness * (this.boostActive ? 1.5 : 1));
+                        stroke(this.boostActive ? colors.paths.boost : colors.paths.base);
+                        if (this.id === bottleneckPathId && !this.boostActive) stroke(colors.particles.red);
+                        
+                        beginShape();
+                        for (let i = 0; i <= 1; i += 0.02) {
+                            let p = this.getPoint(i);
+                            vertex(p.x, p.y);
+                        }
+                        endShape();
+                        // Add some chevrons or lines to indicate flow/width
+                        for(let i=0.1; i < 0.9; i+=0.2) {
+                            let pt = this.getPoint(i);
+                            let angle = this.getAngle(i);
+                            push();
+                            translate(pt.x, pt.y);
+                            rotate(angle + HALF_PI);
+                            stroke(colors.paths.base, 100);
+                            strokeWeight(2);
+                            let len = this.currentThickness * 0.4;
+                            line(-len, 0, len, 0);
+                            pop();
+                        }
+                        break;
+                    case 'time':
+                        this.gates.forEach(gate => {
+                            let p = this.getPoint(gate.tPos);
+                            let angle = this.getAngle(gate.tPos);
+                            push();
+                            translate(p.x, p.y);
+                            rotate(angle + HALF_PI); // Rotate to be perpendicular to path
+                            rectMode(CENTER);
+                            strokeWeight(1.5);
+                            stroke(colors.paths.base);
+                            fill(gate.isOpen ? colors.particles.green : colors.particles.red);
+                            if (gate.isOpen) {
+                                rect(0, -this.thickness * 0.3, this.thickness * 0.3, this.thickness * 0.6);
+                                rect(0,  this.thickness * 0.3, this.thickness * 0.3, this.thickness * 0.6);
+                            } else {
+                                rect(0, 0, this.thickness * 1.2, this.thickness * 0.5);
+                            }
+                            pop();
+                        });
+                        break;
+                    case 'inventory':
+                        for (let filter of this.filters) {
+                           // Draw colored segments along the path
+                           for (let t = filter.tPosStart; t < filter.tPosEnd; t += 0.01) { // Draw small segment
+                                let p1 = this.getPoint(t);
+                                let p2 = this.getPoint(t + 0.01);
+                                push();
+                                stroke(filter.color);
+                                strokeWeight(this.thickness * 0.8 * (this.boostActive ? 1.2 : 1)); // Slightly thinner to show base path
+                                line(p1.x, p1.y, p2.x, p2.y);
+                                pop();
+                            }
+                            // Add a marker for filter color
+                            let midT = (filter.tPosStart + filter.tPosEnd) / 2;
+                            let p = this.getPoint(midT);
+                            let angle = this.getAngle(midT);
+                            push();
+                            translate(p.x, p.y);
+                            rotate(angle);
+                            fill(filter.color);
+                            noStroke();
+                            ellipse(0,0, this.thickness * 0.6, this.thickness * 0.6);
+                            pop();
+                        }
+                        break;
+                }
+            }
+
+            boost() {
+                if (!this.boostActive) {
+                    this.boostActive = true;
+                    this.boostTimer = PATH_BOOST_DURATION;
+                    this.interactionCount++; // Count boost as an interaction
+                    playerMetrics.totalInteractions++;
+                }
+            }
+
+            isNearControlPoint(x, y) {
+                return dist(x, y, this.controlPoints[1].x, this.controlPoints[1].y) < PATH_INTERACTION_RADIUS;
+            }
+
+            // Check if a point (x,y) is "on" or "near" the path curve itself (for boosting)
+            isNearPath(x, y) {
+                const checkRadius = this.thickness * 1.5; // Generous click area
+                // Check against sampled points for simplicity
+                for (let sp of this.sampledPoints) {
+                    if (dist(x, y, sp.p.x, sp.p.y) < checkRadius) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+
+
+        // Input Handling
+        function mousePressed(event) {
+            if (gameState !== 'playing') return;
+            let mx = mouseX;
+            let my = mouseY;
+
+            // Slider interaction
+            let sliderHandleX = map(flowSlider.value, 0.1, 1, flowSlider.x - flowSlider.width/2 + flowSlider.handleWidth/2, flowSlider.x + flowSlider.width/2 - flowSlider.handleWidth/2);
+            if (dist(mx, my, sliderHandleX, flowSlider.y) < flowSlider.handleWidth * 1.5) { // Generous touch area for handle
+                flowSlider.dragging = true;
+                interactionTarget = {type: 'slider'};
+                return;
+            }
+            // Check if click is on slider bar itself
+             if (my > flowSlider.y - flowSlider.height/2 && my < flowSlider.y + flowSlider.height/2 &&
+                mx > flowSlider.x - flowSlider.width/2 && mx < flowSlider.x + flowSlider.width/2) {
+                flowSlider.value = constrain(map(mx, flowSlider.x - flowSlider.width/2, flowSlider.x + flowSlider.width/2, 0.1, 1), 0.1, 1);
+                flowSlider.dragging = true; // Allow drag from bar click too
+                interactionTarget = {type: 'slider'};
+                return;
+            }
+
+
+            // Path dragging interaction
+            for (let path of paths) {
+                if (path.isNearControlPoint(mx, my)) {
+                    draggingPath = path;
+                    interactionTarget = {type: 'pathDrag', path: path};
+                    return;
+                }
+            }
+
+            // Path boost interaction (click on path itself, not control point)
+            for (let path of paths) {
+                if (path.isNearPath(mx, my)) {
+                    path.boost();
+                    interactionTarget = {type: 'pathBoost', path: path};
+                    return;
+                }
+            }
+            interactionTarget = null;
+        }
+
+        function mouseDragged() {
+            if (gameState !== 'playing') return;
+            let mx = mouseX;
+            let my = mouseY;
+
+            if (flowSlider.dragging) {
+                flowSlider.value = constrain(map(mx, flowSlider.x - flowSlider.width/2, flowSlider.x + flowSlider.width/2, 0.1, 1), 0.1, 1);
+            } else if (draggingPath) {
+                draggingPath.moveControlPoint(mx, my);
+            }
+             // Prevent default browser drag behaviors if an interaction is happening
+            if (flowSlider.dragging || draggingPath) {
+                return false;
+            }
+        }
+
+        function mouseReleased() {
+            if (gameState !== 'playing') return;
+            flowSlider.dragging = false;
+            draggingPath = null;
+            interactionTarget = null;
+        }
+
+        // Touch equivalents (can be combined if p5 does it automatically, but good to be explicit)
+        function touchStarted(event) {
+            if (gameState !== 'playing') return;
+            // Basic implementation: call mousePressed logic.
+            // For multi-touch, event.touches[0].clientX would be used. p5 mouseX/Y usually map to first touch.
+            mousePressed(event); 
+            // if (flowSlider.dragging || draggingPath) return false; // Prevent scrolling
+        }
+        function touchMoved(event) {
+            if (gameState !== 'playing') return;
+            mouseDragged(event);
+            if (flowSlider.dragging || draggingPath) return false; // Prevent scrolling
+        }
+        function touchEnded(event) {
+            if (gameState !== 'playing') return;
+            mouseReleased(event);
+            // if (flowSlider.dragging || draggingPath) return false; 
+        }
+
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+            setupLayout(); // Recalculate positions and sizes
+            if(gameState === 'playing') { // Only redraw background if game is active or restarting
+                drawBackgroundPattern(); // Redraw background pattern
+                 // Paths might need to be re-initialized or their points updated if source/dest changed.
+                // For simplicity, re-initialize paths if positions are drastically changing.
+                // However, current setupLayout keeps source/dest proportional, so path objects should adapt if their control points are also proportional.
+                // Let's make sure path control points are also relative for better resize.
+                // This is complex to retrofit; for now, paths might get distorted on resize until interacted with.
+                // A better way is to re-initialize paths in setupLayout if game is active.
+                if (paths && paths.length > 0) {
+                    // Simple re-init of path positions based on new source/dest
+                    // This resets any user dragging. A more complex solution would preserve relative drag offsets.
+                     paths[0].controlPoints = [sourcePos.copy(), createVector(width * 0.5, height * 0.35), destPos.copy()];
+                     paths[1].controlPoints = [sourcePos.copy(), createVector(width * 0.4, height * 0.65), destPos.copy()];
+                     paths[2].controlPoints = [sourcePos.copy(), createVector(width * 0.6, height * 0.5), destPos.copy()];
+                     paths.forEach(p => p.resamplePoints());
+                }
+            } else if (gameState === 'instructions') {
+                 showInstructions(); // Re-check mobile/desktop for instructions
+            }
+        }
+
+        // Utility for distSq
+        function distSq(v1, v2_or_x, y_if_x_is_passed) {
+            let x1, y1, x2, y2;
+            if (v2_or_x instanceof p5.Vector) {
+                x1 = v1.x; y1 = v1.y;
+                x2 = v2_or_x.x; y2 = v2_or_x.y;
+            } else {
+                x1 = v1.x; y1 = v1.y; // Assuming v1 is a vector
+                x2 = v2_or_x; y2 = y_if_x_is_passed;
+            }
+            let dx = x1 - x2;
+            let dy = y1 - y2;
+            return dx * dx + dy * dy;
+        }
+
+        // Helper to get color with alpha for Chart.js
+        functionผู้ชม(hexColor, alpha) {
+            let r = parseInt(hexColor.slice(1, 3), 16);
+            let g = parseInt(hexColor.slice(3, 5), 16);
+            let b = parseInt(hexColor.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+    </script>
+</body>
+</html>
